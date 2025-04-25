@@ -1,5 +1,6 @@
 # GLOBAL BUILD ARG
-ARG UNBOUND_IMAGE_VERSION=1.22.0-a
+ARG UNBOUND_IMAGE_VERSION=1.23.0
+ARG UNBOUND_IMAGE_REVISION=a
 
 # UNBOUND BUILDER
 FROM alpine:latest AS builder
@@ -10,7 +11,6 @@ RUN set -x -e; \
   apk --update --no-cache add \
     ca-certificates \
     curl \
-    drill \
     gnupg \
     shadow \
     linux-headers \
@@ -139,13 +139,42 @@ RUN curl -sSL "${NGHTTP2_DOWNLOAD_URL}"/"${NGHTTP2_RELEASE}"/"${NGHTTP2_VERSION}
   make install && \
   rm -rf /usr/share/man /usr/share/docs /tmp/* /var/tmp/* /var/log/*
 
+# ldns install
+ENV LDNS_VERSION=ldns-1.8.4 \
+  LDNS_DOWNLOAD_URL=https://nlnetlabs.nl/downloads/ldns \
+  LDNS_SHA256=838b907594baaff1cd767e95466a7745998ae64bc74be038dccc62e2de2e4247 \
+  LDNS_PGP_0=DC34EE5DB2417BCC151E5100E5F8F8212F77A498
+
+WORKDIR /tmp/ldns
+
+RUN set -x -e; \
+    curl -sSL "${LDNS_DOWNLOAD_URL}"/"${LDNS_VERSION}".tar.gz -o ldns.tar.gz && \
+    echo "${LDNS_SHA256} ./ldns.tar.gz" | sha256sum -c - && \
+    curl -L "${LDNS_DOWNLOAD_URL}"/"${LDNS_VERSION}".tar.gz.asc -o ldns.tar.gz.asc && \
+    GNUPGHOME="$(mktemp -d)" && \
+    export GNUPGHOME && \
+    gpg --no-tty --keyserver hkps://keys.openpgp.org --recv-keys "${LDNS_PGP_0}" && \
+    gpg --batch --verify ldns.tar.gz.asc ldns.tar.gz && \
+    tar -xzf ldns.tar.gz && \
+    rm -f ldns.tar.gz && \
+    cd "${LDNS_VERSION}" && \
+    ./configure \
+      --prefix=/usr/local \
+      --with-ssl \
+      --with-drill \
+      --enable-static \
+      --disable-shared &&\
+    make -j$(nproc) &&\
+    make install && \
+    rm -rf /usr/share/man /usr/share/docs /tmp/* /var/tmp/* /var/log/*
+
 # unbound install
-ENV UNBOUND_VERSION=unbound-1.22.0 \
+ENV UNBOUND_VERSION=unbound-1.23.0 \
   UNBOUND_DOWNLOAD_URL=https://nlnetlabs.nl/downloads/unbound \
-  UNBOUND_SHA256=c5dd1bdef5d5685b2cedb749158dd152c52d44f65529a34ac15cd88d4b1b3d43 \
+  # UNBOUND_SHA256=c5dd1bdef5d5685b2cedb749158dd152c52d44f65529a34ac15cd88d4b1b3d43 \
+  UNBOUND_SHA256=959bd5f3875316d7b3f67ee237a56de5565f5b35fc9b5fc3cea6cfe735a03bb8 \
   UNBOUND_PGP_0=F0CB1A326BDF3F3EFA3A01FA937BB869E3A238C5 \
-  UNBOUND_PGP_1=EDFAA3F2CA4E6EB05681AF8E9F6F1C2D7E045F8D \
-  INIC_PGP_0=F0CB1A326BDF3F3EFA3A01FA937BB869E3A238C5
+  UNBOUND_PGP_1=EDFAA3F2CA4E6EB05681AF8E9F6F1C2D7E045F8D
 
 WORKDIR /tmp/unbound
 
@@ -160,7 +189,7 @@ RUN set -x -e; \
   tar -xzf unbound.tar.gz && \
   rm -f unbound.tar.gz && \
   groupadd _unbound && \
-  useradd -g _unbound -s /dev/null -d /etc _unbound && \
+  useradd -g _unbound -s /dev/null -d /dev/null _unbound && \
   cd "${UNBOUND_VERSION}" && \
   ./configure \
     --prefix=/opt/unbound \
@@ -199,17 +228,15 @@ LABEL maintainer="cloubit"
 # copy required programs and dependencies to stage
 COPY --from=builder /opt/unbound/ \
   /stage/opt/unbound/
-COPY --from=builder /bin/sh /bin/ls /bin/mkdir /bin/chown /bin/cp /bin/cat /bin/chmod /bin/rm \
+COPY --from=builder /bin/sh /bin/ls /bin/rm /bin/cp /bin/cat /bin/mkdir /bin/chown /bin/chmod \
  /stage/bin/
-COPY --from=builder /usr/bin/drill \
-  /stage/usr/bin/
 COPY --from=builder /usr/local/bin/ \
   /stage/usr/local/bin/
 COPY --from=builder /lib/*musl* \
  /stage/lib/
-COPY --from=builder /usr/lib/libabsl_* /usr/lib/libgcc_* /usr/lib/libproto* /usr/lib/libs* /usr/lib/libz* /usr/lib/libldns* /usr/lib/libcrypto* \
+COPY --from=builder /usr/lib/libproto* /usr/lib/libs* /usr/lib/libz* \
   /stage/usr/lib/
-COPY --from=builder /usr/local/lib/ \
+COPY --from=builder /usr/local/lib* /usr/local/lib/ossl-modules/ \
   /stage/usr/local/lib/
 COPY --from=builder /etc/passwd /etc/shadow /etc/group \
   /stage/etc/
@@ -223,15 +250,17 @@ COPY --from=builder /tmp/unbound/dev \
 FROM scratch
 
 ARG UNBOUND_IMAGE_VERSION
-
-ENV UNBOUND_IMAGE_VERSION=${UNBOUND_IMAGE_VERSION}
+ARG UNBOUND_IMAGE_REVISION
+ENV UNBOUND_IMAGE=${UNBOUND_IMAGE_VERSION}-${UNBOUND_IMAGE_REVISION}
+ARG UNBOUND_CONFIG=data
+ENV UNBOUND_CONFIG=${UNBOUND_CONFIG}
 
 LABEL maintainer="cloubit" \
-  org.opencontainers.image.version=${UNBOUND_IMAGE_VERSION} \
-  org.opencontainers.image.title="cloubit/unbound" \
-  org.opencontainers.image.vendor="Cloubit GmbH" \
+  org.opencontainers.image.version=${UNBOUND_IMAGE} \
+  org.opencontainers.image.title="Unbound on Docker" \
   org.opencontainers.image.description="Unbound is a validating, recursive, and caching DNS resolver." \
   org.opencontainers.image.summary="Distroless Unbound Docker image, based on Alpine Linux, with focus on security and privacy." \
+  org.opencontainers.image.vendor="Cloubit GmbH" \
   org.opencontainers.image.base.name="cloubit/unbound" \
   org.opencontainers.image.url="https://hub.docker.com/repository/docker/cloubit/unbound" \
   org.opencontainers.image.source="https://github.com/cloubit/unbound-docker" \
@@ -239,7 +268,7 @@ LABEL maintainer="cloubit" \
   org.opencontainers.image.licenses="MIT"
 
 COPY --from=stage /stage /
-COPY data/ /opt/unbound/etc/unbound/
+COPY ${UNBOUND_CONFIG} /opt/unbound/etc/unbound/
 
 RUN mkdir -p -m 700 /opt/unbound/etc/unbound/var && \
   mkdir -p -m 700 /opt/unbound/etc/unbound/dev && \
@@ -250,8 +279,7 @@ RUN mkdir -p -m 700 /opt/unbound/etc/unbound/var && \
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD drill -D -o cd @127.0.0.1 cloudflare.com
 
-EXPOSE 53/tcp
-EXPOSE 53/udp
+EXPOSE 53/tcp 53/udp
 
 WORKDIR /opt/unbound/
 
