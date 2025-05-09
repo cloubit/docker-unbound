@@ -4,7 +4,7 @@
 
 ## Image details
 
--  NSD 1.23.0
+-  Unbound 1.23.0
 -  Openssl 3.5.0
 
 ## Create Docker image
