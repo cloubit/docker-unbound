@@ -235,8 +235,14 @@ COPY --from=builder /lib/*musl* \
  /stage/lib/
 COPY --from=builder /usr/lib/libproto* /usr/lib/libs* /usr/lib/libz* \
   /stage/usr/lib/
-COPY --from=builder /usr/local/lib* /usr/local/lib/ossl-modules/ \
+COPY --from=builder /usr/local/lib/lib* \
   /stage/usr/local/lib/
+COPY --from=builder /usr/local/lib/ossl-*/ \
+  /stage/usr/local/lib/ossl-modules/
+COPY --from=builder /usr/local/lib6*/lib* \
+  /stage/usr/local/lib64/
+COPY --from=builder /usr/local/lib6*/ossl-*/ \
+  /stage/usr/local/lib64/ossl-modules/
 COPY --from=builder /etc/passwd /etc/shadow /etc/group \
   /stage/etc/
 COPY --from=builder /etc/ssl/certs/ \
