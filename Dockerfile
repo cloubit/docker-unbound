@@ -24,8 +24,7 @@ RUN set -x -e; \
 ENV OPENSSL_VERSION=openssl-3.5.0 \
   OPENSSL_DOWNLOAD_URL=https://github.com/openssl/openssl/releases/download \
   OPENSSL_SHA256=344d0a79f1a9b08029b0744e2cc401a43f9c90acd1044d09a530b4885a8e9fc0 \
-  OPENSSL_PGP_0=BA5473A2B0587B07FB27CF2D216094DFD0CB81EF \
-  OPENSSL_PGP_1=EFC0A467D613CB83C7ED6D30D894E2CE8B3D79F5
+  OPENSSL_PGP_0=BA5473A2B0587B07FB27CF2D216094DFD0CB81EF
 
 WORKDIR /tmp/openssl
 
@@ -35,7 +34,7 @@ RUN set -x -e; \
   curl -sSL "${OPENSSL_DOWNLOAD_URL}"/"${OPENSSL_VERSION}"/"${OPENSSL_VERSION}".tar.gz.asc -o openssl.tar.gz.asc && \
   GNUPGHOME="$(mktemp -d)" && \
   export GNUPGHOME && \
-  gpg --no-tty --keyserver hkps://keys.openpgp.org --recv-keys "${OPENSSL_PGP_0}" "${OPENSSL_PGP_1}" && \
+  gpg --no-tty --keyserver hkps://keys.openpgp.org --recv-keys "${OPENSSL_PGP_0}" && \
   gpg --batch --verify openssl.tar.gz.asc openssl.tar.gz && \
   tar -xzf openssl.tar.gz && \
   rm -f openssl.tar.gz && \
